@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Интерактивная 2D симуляция экосистемы: Хищник — Жертва</title>
+    <!-- Подключаем Tailwind CSS для красивого интерфейса -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0b0f19;
+            color: #f3f4f6;
+            overflow-x: hidden;
+        }
+        /* Кастомный стиль для слайдеров */
+        input[type="range"] {
+            accent-color: #10b981;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col xl:flex-row">
+
+    <!-- Боковая панель управления -->
+    <aside class="w-full xl:w-96 bg-gray-900/80 backdrop-blur-md border-b xl:border-b-0 xl:border-r border-gray-800 p-6 flex flex-col justify-between shadow-2xl z-10">
+        <div>
+            <!-- Заголовок -->
+            <div class="flex items-center space-x-3 mb-6">
+                <div class="w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
+                <h1 class="text-xl font-bold tracking-tight text-white">Экосистема: Хищник-Жертва</h1>
+            </div>
+
+            <p class="text-xs text-gray-400 mb-6 leading-relaxed">
+                Симуляция естественного отбора и динамики популяций. Зеленые агенты ищут пищу и размножаются, красные охотятся на зеленых. Изменяйте параметры на лету!
+            </p>
+
+            <!-- Статистика в реальном времени -->
+            <div class="grid grid-cols-3 gap-3 mb-6">
+                <div class="bg-gray-800/60 border border-gray-700/50 rounded-xl p-3 text-center">
+                    <div class="text-xs text-gray-400 font-medium uppercase">Трава</div>
+                    <div id="stat-food" class="text-lg font-bold text-emerald-400 mt-1">0</div>
+                </div>
+                <div class="bg-gray-800/60 border border-gray-700/50 rounded-xl p-3 text-center">
+                    <div class="text-xs text-gray-400 font-medium uppercase">Жертвы</div>
+                    <div id="stat-prey" class="text-lg font-bold text-green-400 mt-1">0</div>
+                </div>
+                <div class="bg-gray-800/60 border border-gray-700/50 rounded-xl p-3 text-center">
+                    <div class="text-xs text-gray-400 font-medium uppercase">Хищники</div>
+                    <div id="stat-predators" class="text-lg font-bold text-rose-400 mt-1">0</div>
+                </div>
+            </div>
+
+            <!-- Слайдеры параметров -->
+            <div class="space-y-4">
+                <div>
+                    <div class="flex justify-between text-xs font-medium text-gray-300 mb-1">
+                        <span>Начальные жертвы</span>
+                        <span id="val-init-prey" class="text-emerald-400">80</span>
+                    </div>
+                    <input id="slider-init-prey" type="range" min="10" max="250" value="80" class="w-full bg-gray-700 rounded-lg h-2 cursor-pointer">
+                </div>
+
+                <div>
+                    <div class="flex justify-between text-xs font-medium text-gray-300 mb-1">
+                        <span>Начальные хищники</span>
+                        <span id="val-init-pred" class="text-rose-400">20</span>
+                    </div>
+                    <input id="slider-init-pred" type="range" min="5" max="100" value="20" class="w-full bg-gray-700 rounded-lg h-2 cursor-pointer">
+                </div>
+
+                <div>
+                    <div class="flex justify-between text-xs font-medium text-gray-300 mb-1">
+                        <span>Скорость метаболизма (трата энергии)</span>
+                        <span id="val-metabolism" class="text-amber-400">0.2</span>
+                    </div>
+                    <input id="slider-metabolism" type="range" min="0.05" max="0.6" step="0.01" value="0.2" class="w-full bg-gray-700 rounded-lg h-2 cursor-pointer">
+                </div>
+
+                <div>
+                    <div class="flex justify-between text-xs font-medium text-gray-300 mb-1">
+                        <span>Шанс мутации генов</span>
+                        <span id="val-mutation" class="text-indigo-400">10%</span>
+                    </div>
+                    <input id="slider-mutation" type="range" min="0" max="50" value="10" class="w-full bg-gray-700 rounded-lg h-2 cursor-pointer">
+                </div>
+
+                <div>
+                    <div class="flex justify-between text-xs font-medium text-gray-300 mb-1">
+                        <span>Скорость появления травы</span>
+                        <span id="val-grass-rate" class="text-teal-400">5</span>
+                    </div>
+                    <input id="slider-grass-rate" type="range" min="1" max="15" value="5" class="w-full bg-gray-700 rounded-lg h-2 cursor-pointer">
+                </div>
+            </div>
+        </div>
+
+        <!-- Кнопки управления -->
+        <div class="mt-8 pt-4 border-t border-gray-800 flex gap-3">
+            <button id="btn-pause" class="flex-1 bg-gray-800 hover:bg-gray-700 text-white font-medium py-2.5 px-4 rounded-xl text-sm transition-all border border-gray-700 shadow-sm active:scale-95">Пауза</button>
+            <button id="btn-reset" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2.5 px-4 rounded-xl text-sm transition-all shadow-lg shadow-emerald-900/20 active:scale-95">Перезапуск</button>
+        </div>
+    </aside>
+
+    <!-- Основной блок с Canvas -->
+    <main class="flex-1 flex flex-col items-center justify-center p-4 xl:p-8 relative">
+        <div class="w-full max-w-5xl h-[70vh] xl:h-[80vh] bg-gray-900/50 border border-gray-800/80 rounded-2xl shadow-2xl overflow-hidden relative flex items-center justify-center">
+            <canvas id="simCanvas" class="w-full h-full block cursor-crosshair"></canvas>
+            
+            <!-- Оверлей уведомлений (при вымирании видов) -->
+            <div id="alert-box" class="absolute inset-x-4 top-4 bg-gray-950/80 backdrop-blur-md border border-gray-700 text-center py-2 px-4 rounded-xl text-xs font-medium text-amber-300 transition-opacity duration-500 opacity-0 pointer-events-none">
+                Экосистема сбалансирована
+            </div>
+        </div>
+        <div class="mt-3 text-xs text-gray-500 text-center">
+            Подсказка: Трава растет случайным образом. Зеленые едят траву и делятся. Красные охотятся на зеленых для поддержания энергии.
+        </div>
+    </main>
+
+    <!-- Логика симуляции на JavaScript -->
+    <script>
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Ссылки на элементы UI
+        const statFood = document.getElementById('stat-food');
+        const statPrey = document.getElementById('stat-prey');
+        const statPredators = document.getElementById('stat-predators');
+        const alertBox = document.getElementById('alert-box');
+
+        const sliderInitPrey = document.getElementById('slider-init-prey');
+        const sliderInitPred = document.getElementById('slider-init-pred');
+        const sliderMetabolism = document.getElementById('slider-metabolism');
+        const sliderMutation = document.getElementById('slider-mutation');
+        const sliderGrassRate = document.getElementById('slider-grass-rate');
+
+        const valInitPrey = document.getElementById('val-init-prey');
+        const valInitPred = document.getElementById('val-init-pred');
+        const valMetabolism = document.getElementById('val-metabolism');
+        const valMutation = document.getElementById('val-mutation');
+        const valGrassRate = document.getElementById('val-grass-rate');
+
+        const btnPause = document.getElementById('btn-pause');
+        const btnReset = document.getElementById('btn-reset');
+
+        let isRunning = true;
+
+        // Настройки мира
+        let width, height;
+        function resizeCanvas() {
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            width = canvas.width;
+            height = canvas.height;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Массивы сущностей
+        let preyList = [];
+        let predatorList = [];
+        let grassList = [];
+
+        // Класс Травы (Еды)
+        class Grass {
+            constructor(x, y) {
+                this.x = x || Math.random() * width;
+                this.y = y || Math.random() * height;
+            }
+            draw() {
+                ctx.fillStyle = '#10b981';
+                ctx.fillRect(this.x, this.y, 3, 3);
+            }
+        }
+
+        // Базовый класс живого организма
+        class Organism {
+            constructor(x, y, speed, vision, size) {
+                this.x = x;
+                this.y = y;
+                this.speed = speed; // Скорость передвижения
+                this.vision = vision; // Радиус обзора
+                this.size = size;
+                this.energy = 100; // Энергия/Здоровье
+                this.vx = (Math.random() - 0.5) * this.speed;
+                this.vy = (Math.random() - 0.5) * this.speed;
+            }
+
+            updatePosition() {
+                // Плавное блуждание или движение
+                this.vx += (Math.random() - 0.5) * 0.5;
+                this.vy += (Math.random() - 0.5) * 0.5;
+
+                // Ограничение максимальной скорости
+                const currentSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+                if (currentSpeed > this.speed) {
+                    this.vx = (this.vx / currentSpeed) * this.speed;
+                    this.vy = (this.vy / currentSpeed) * this.speed;
+                }
+
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Границы мира (тороидальные — проход сквозь стены)
+                if (this.x < 0) this.x = width;
+                if (this.x > width) this.x = 0;
+                if (this.y < 0) this.y = height;
+                if (this.y > height) this.y = 0;
+            }
+        }
+
+        // Класс Травоядного (Жертвы)
+        class Prey extends Organism {
+            constructor(x, y, speed, vision) {
+                super(x, y, speed || 2.2, vision || 60, 5);
+                this.reproductionEnergy = 140; // Энергия для деления
+            }
+
+            update(metabolism) {
+                this.energy -= metabolism;
+                
+                // Поиск ближайшей травы
+                let closestGrass = null;
+                let minDist = this.vision;
+
+                for (let i = 0; i < grassList.length; i++) {
+                    let g = grassList[i];
+                    let d = Math.hypot(g.x - this.x, g.y - this.y);
+                    if (d < minDist) {
+                        minDist = d;
+                        closestGrass = g;
+                    }
+                }
+
+                // Если видит траву — бежит к ней
+                if (closestGrass) {
+                    let angle = Math.atan2(closestGrass.y - this.y, closestGrass.x - this.x);
+                    this.vx = Math.cos(angle) * this.speed;
+                    this.vy = Math.sin(angle) * this.speed;
+
+                    // Поедание травы
+                    if (minDist < 8) {
+                        this.energy += 35;
+                        if (this.energy > 200) this.energy = 200;
+                        // Удаляем съеденную траву
+                        let index = grassList.indexOf(closestGrass);
+                        if (index > -1) grassList.splice(index, 1);
+                    }
+                }
+
+                // Убегание от ближайшего хищника
+                let closestPredator = null;
+                let minPredDist = this.vision * 1.2;
+
+                for (let i = 0; i < predatorList.length; i++) {
+                    let p = predatorList[i];
+                    let d = Math.hypot(p.x - this.x, p.y - this.y);
+                    if (d < minPredDist) {
+                        minPredDist = d;
+                        closestPredator = p;
+                    }
+                }
+
+                if (closestPredator) {
+                    let angle = Math.atan2(this.y - closestPredator.y, this.x - closestPredator.x);
+                    this.vx = Math.cos(angle) * this.speed * 1.3;
+                    this.vy = Math.sin(angle) * this.speed * 1.3;
+                }
+
+                this.updatePosition();
+            }
+
+            draw() {
+                ctx.fillStyle = '#4ade80';
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            reproduce(mutationRate) {
+                if (this.energy >= this.reproductionEnergy) {
+                    this.energy /= 2;
+                    let mSpeed = this.speed + (Math.random() - 0.5) * mutationRate * 0.1;
+                    let mVision = this.vision + (Math.random() - 0.5) * mutationRate * 5;
+                    mSpeed = Math.max(1, Math.min(4.5, mSpeed));
+                    mVision = Math.max(30, Math.min(150, mVision));
+
+                    let child = new Prey(this.x + (Math.random() - 0.5) * 10, this.y + (Math.random() - 0.5) * 10, mSpeed, mVision);
+                    child.energy = this.energy;
+                    return child;
+                }
+                return null;
+            }
+        }
+
+        // Класс Хищника
+        class Predator extends Organism {
+            constructor(x, y, speed, vision) {
+                super(x, y, speed || 2.0, vision || 90, 7);
+                this.reproductionEnergy = 170;
+            }
+
+            update(metabolism) {
+                this.energy -= metabolism * 1.5; // Хищники тратят энергию быстрее
+
+                // Поиск ближайшей жертвы
+                let closestPrey = null;
+                let minDist = this.vision;
+
+                for (let i = 0; i < preyList.length; i++) {
+                    let pr = preyList[i];
+                    let d = Math.hypot(pr.x - this.x, pr.y - this.y);
+                    if (d < minDist) {
+                        minDist = d;
+                        closestPrey = pr;
+                    }
+                }
+
+                if (closestPrey) {
+                    let angle = Math.atan2(closestPrey.y - this.y, closestPrey.x - this.x);
+                    this.vx = Math.cos(angle) * this.speed;
+                    this.vy = Math.sin(angle) * this.speed;
+
+                    // Атака / Поедание жертвы
+                    if (minDist < 10) {
+                        this.energy += 65;
+                        if (this.energy > 220) this.energy = 220;
+                        let index = preyList.indexOf(closestPrey);
+                        if (index > -1) preyList.splice(index, 1);
+                    }
+                }
+
+                this.updatePosition();
+            }
+
+            draw() {
+                ctx.fillStyle = '#f43f5e';
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            reproduce(mutationRate) {
+                if (this.energy >= this.reproductionEnergy) {
+                    this.energy /= 2;
+                    let mSpeed = this.speed + (Math.random() - 0.5) * mutationRate * 0.1;
+                    let mVision = this.vision + (Math.random() - 0.5) * mutationRate * 5;
+                    mSpeed = Math.max(1, Math.min(4.2, mSpeed));
+                    mVision = Math.max(40, Math.min(180, mVision));
+
+                    let child = new Predator(this.x + (Math.random() - 0.5) * 10, this.y + (Math.random() - 0.5) * 10, mSpeed, mVision);
+                    child.energy = this.energy;
+                    return child;
+                }
+                return null;
+            }
+        }
+
+        // Инициализация симуляции
+        function initSimulation() {
+            preyList = [];
+            predatorList = [];
+            grassList = [];
+
+            const initPreyCount = parseInt(sliderInitPrey.value);
+            const initPredCount = parseInt(sliderInitPred.value);
+
+            for (let i = 0; i < initPreyCount; i++) {
+                preyList.push(new Prey(Math.random() * width, Math.random() * height));
+            }
+            for (let i = 0; i < initPredCount; i++) {
+                predatorList.push(new Predator(Math.random() * width, Math.random() * height));
+            }
+            for (let i = 0; i < 100; i++) {
+                grassList.push(new Grass());
+            }
+        }
+
+        // Обновление интерфейса значений слайдеров
+        function updateSliderLabels() {
+            valInitPrey.innerText = sliderInitPrey.value;
+            valInitPred.innerText = sliderInitPred.value;
+            valMetabolism.innerText = sliderMetabolism.value;
+            valMutation.innerText = sliderMutation.value + '%';
+            valGrassRate.innerText = sliderGrassRate.value;
+        }
+
+        // Главный цикл симуляции
+        function loop() {
+            if (isRunning) {
+                // Очистка экрана
+                ctx.fillStyle = '#0b0f19';
+                ctx.fillRect(0, 0, width, height);
+
+                const metabolism = parseFloat(sliderMetabolism.value);
+                const mutationRate = parseInt(sliderMutation.value) / 100;
+                const grassRate = parseInt(sliderGrassRate.value);
+
+                // Рост травы
+                for (let i = 0; i < grassRate; i++) {
+                    if (grassList.length < 400) {
+                        grassList.push(new Grass());
+                    }
+                }
+
+                // Отрисовка травы
+                for (let i = 0; i < grassList.length; i++) {
+                    grassList[i].draw();
+                }
+
+                // Обновление и отрисовка жертв
+                let newPrey = [];
+                for (let i = preyList.length - 1; i >= 0; i--) {
+                    let p = preyList[i];
+                    p.update(metabolism);
+                    if (p.energy <= 0) {
+                        preyList.splice(i, 1); // Смерть от голода
+                    } else {
+                        p.draw();
+                        let child = p.reproduce(mutationRate);
+                        if (child) newPrey.push(child);
+                    }
+                }
+                preyList.push(...newPrey);
+
+                // Обновление и отрисовка хищников
+                let newPredators = [];
+                for (let i = predatorList.length - 1; i >= 0; i--) {
+                    let pred = predatorList[i];
+                    pred.update(metabolism);
+                    if (pred.energy <= 0) {
+                        predatorList.splice(i, 1); // Смерть от голода
+                    } else {
+                        pred.draw();
+                        let child = pred.reproduce(mutationRate);
+                        if (child) newPredators.push(child);
+                    }
+                }
+                predatorList.push(...newPredators);
+
+                // Обновление статистики в блоке UI
+                statFood.innerText = grassList.length;
+                statPrey.innerText = preyList.length;
+                statPredators.innerText = predatorList.length;
+
+                // Уведомление о вымирании
+                if (preyList.length === 0 && predatorList.length === 0) {
+                    showAlert("Экосистема пуста! Нажмите 'Перезапуск'");
+                } else if (predatorList.length === 0) {
+                    showAlert("Все хищники вымерли. Популяция жертв процветает.");
+                } else if (preyList.length === 0) {
+                    showAlert("Все жертвы съедены. Хищники погибают от голода.");
+                } else {
+                    hideAlert();
+                }
+            }
+            requestAnimationFrame(loop);
+        }
+
+        function showAlert(text) {
+            alertBox.innerText = text;
+            alertBox.classList.remove('opacity-0', 'pointer-events-none');
+            alertBox.classList.add('opacity-100');
+        }
+
+        function hideAlert() {
+            alertBox.classList.remove('opacity-100');
+            alertBox.classList.add('opacity-0', 'pointer-events-none');
+        }
+
+        // События интерфейса
+        sliderInitPrey.addEventListener('input', updateSliderLabels);
+        sliderInitPred.addEventListener('input', updateSliderLabels);
+        sliderMetabolism.addEventListener('input', updateSliderLabels);
+        sliderMutation.addEventListener('input', updateSliderLabels);
+        sliderGrassRate.addEventListener('input', updateSliderLabels);
+
+        btnReset.addEventListener('click', () => {
+            initSimulation();
+        });
+
+        btnPause.addEventListener('click', () => {
+            isRunning = !isRunning;
+            btnPause.innerText = isRunning ? "Пауза" : "Продолжить";
+            btnPause.classList.toggle('bg-emerald-900/40', !isRunning);
+        });
+
+        // Запуск
+        updateSliderLabels();
+        initSimulation();
+        loop();
+    </script>
+</body>
+</html>
